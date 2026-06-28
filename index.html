@@ -361,7 +361,7 @@ function showResult(r) {
   let starsHtml = "";
   if (judgment !== "NG" && stars !== null && stars !== undefined) {
     const filled  = "★".repeat(stars);
-    const empty   = "☆".repeat(4 - stars);
+    const empty   = "☆".repeat(Math.max(0, 5 - stars));
     starsHtml = `
       <div class="result-row">
         <span class="key">星の数</span>
