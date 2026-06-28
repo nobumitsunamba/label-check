@@ -1,0 +1,8 @@
+{
+  "name": "label-check-api",
+  "version": "1.0.0",
+  "description": "Azure Functions API for label-check",
+  "engines": {
+    "node": ">=18"
+  }
+}
