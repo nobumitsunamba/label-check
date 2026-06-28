@@ -260,16 +260,11 @@
 </main>
 
 <script>
-// ============================================================
-// ⚠️ 本番環境では Azure SWA の環境変数または Azure Key Vault を
-//    利用してAPIキーを管理してください。
-//    フロントエンドにAPIキーを直書きしないことを強く推奨します。
-// ============================================================
-const CLAUDE_API_KEY = "YOUR_API_KEY_HERE";
-
-const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
-const CLAUDE_MODEL   = "claude-sonnet-4-6";
-const MAX_FILE_SIZE  = 5 * 1024 * 1024; // 5MB
+// APIキーはフロントエンドに持たず、/api/judge（Azure Functions）経由で呼び出す。
+// APIキーは Azure ポータルの「環境変数（アプリケーション設定）」に
+// CLAUDE_API_KEY という名前で設定してください。
+const JUDGE_API_URL = "/api/judge";
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
 const fileInput   = document.getElementById("fileInput");
 const previewWrap = document.getElementById("previewWrap");
@@ -317,7 +312,7 @@ judgeBtn.addEventListener("click", async () => {
   try {
     const base64 = await fileToBase64(selectedFile);
     const mediaType = selectedFile.type === "image/png" ? "image/png" : "image/jpeg";
-    const result = await callClaudeAPI(base64, mediaType);
+    const result = await callJudgeAPI(base64, mediaType);
     showResult(result);
   } catch (err) {
     showError("判定中にエラーが発生しました。\n" + (err.message || String(err)));
@@ -336,85 +331,21 @@ function fileToBase64(file) {
   });
 }
 
-// ─── Claude API 呼び出し ──────────────────────────────────────
-async function callClaudeAPI(base64, mediaType) {
-  const systemPrompt = `あなたは自動車の「低排出ガス認定ラベル」を画像から判定する専門システムです。
-判定対象ラベルの特徴
-* 形状: 青色系の楕円形
-* 内容: 星マーク（0〜4個）と「低排出ガス車」の文字
-* 位置: 車のボディに貼付
-判定ルール
-以下のいずれかに分類してください。
-1. OK: ラベルが画像内に明確に1枚確認でき、特徴（青楕円・低排出ガス車の文字）が判別できる
-2. 要確認: 以下のいずれかに該当する場合
-   * ラベルらしきものは見えるが、不鮮明・ぼけ・反射などで確信できない
-   * ラベルが複数枚写っている
-3. NG: ラベルが画像内に存在しない、または全く別のものが写っている
-レスポンス形式
-必ず以下のJSON形式のみで返答してください。他のテキストは含めないでください。
-{ "judgment": "OK" | "要確認" | "NG", "stars": 0〜4の整数（判定がNGまたは要確認でラベルが不明な場合はnull）, "confidence": 0〜100の整数（判定の確信度）, "reason": "判定根拠を1〜3文で簡潔に記述" }`;
-
-  const body = {
-    model: CLAUDE_MODEL,
-    max_tokens: 512,
-    system: systemPrompt,
-    messages: [
-      {
-        role: "user",
-        content: [
-          {
-            type: "image",
-            source: { type: "base64", media_type: mediaType, data: base64 }
-          },
-          {
-            type: "text",
-            text: "この画像の低排出ガス認定ラベルを判定してください。"
-          }
-        ]
-      }
-    ]
-  };
-
-  const res = await fetch(CLAUDE_API_URL, {
+// ─── /api/judge 呼び出し（APIキーはサーバー側で管理）──────────
+async function callJudgeAPI(base64, mediaType) {
+  const res = await fetch(JUDGE_API_URL, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": CLAUDE_API_KEY,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true"
-    },
-    body: JSON.stringify(body)
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ image: base64, mediaType })
   });
 
+  const data = await res.json().catch(() => null);
+
   if (!res.ok) {
-    const errText = await res.text().catch(() => "");
-    throw new Error(`APIエラー (${res.status}): ${errText.slice(0, 200)}`);
+    throw new Error(data?.error ?? `サーバーエラー (${res.status})`);
   }
 
-  const data = await res.json();
-  const text = data?.content?.[0]?.text ?? "";
-
-  // JSON部分を抽出してパース
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    return {
-      judgment: "要確認",
-      stars: null,
-      confidence: 0,
-      reason: `APIレスポンスからJSONを取得できませんでした。生レスポンス: ${text.slice(0, 200)}`
-    };
-  }
-
-  try {
-    return JSON.parse(jsonMatch[0]);
-  } catch (e) {
-    return {
-      judgment: "要確認",
-      stars: null,
-      confidence: 0,
-      reason: `JSONパースに失敗しました。生レスポンス: ${text.slice(0, 200)}`
-    };
-  }
+  return data;
 }
 
 // ─── 結果表示 ─────────────────────────────────────────────────
