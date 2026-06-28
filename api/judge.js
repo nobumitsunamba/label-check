@@ -1,4 +1,6 @@
-// APIキーは Azure ポータルの「環境変数（アプリケーション設定）」に
+// Vercel Serverless Function: POST /api/judge
+//
+// APIキーは Vercel のプロジェクト設定 → Environment Variables に
 // CLAUDE_API_KEY という名前で設定してください。コードには書かないこと。
 
 const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
@@ -20,40 +22,30 @@ const SYSTEM_PROMPT = `あなたは自動車の「低排出ガス認定ラベル
 必ず以下のJSON形式のみで返答してください。他のテキストは含めないでください。
 { "judgment": "OK" | "要確認" | "NG", "stars": 0〜4の整数（判定がNGまたは要確認でラベルが不明な場合はnull）, "confidence": 0〜100の整数（判定の確信度）, "reason": "判定根拠を1〜3文で簡潔に記述" }`;
 
-module.exports = async function (context, req) {
-  // CORS プリフライト
-  if (req.method === "OPTIONS") {
-    context.res = { status: 204, headers: corsHeaders() };
+module.exports = async (req, res) => {
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "POSTメソッドを使用してください。" });
     return;
   }
 
   const apiKey = process.env.CLAUDE_API_KEY;
   if (!apiKey) {
-    context.res = {
-      status: 500,
-      headers: corsHeaders(),
-      body: JSON.stringify({ error: "サーバー設定エラー: CLAUDE_API_KEY が未設定です。" })
-    };
+    res.status(500).json({ error: "サーバー設定エラー: CLAUDE_API_KEY が未設定です。" });
     return;
   }
 
-  const { image, mediaType } = req.body ?? {};
+  // Vercel は application/json のボディを自動でパースして req.body に入れる
+  const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+  const { image, mediaType } = body;
+
   if (!image || !mediaType) {
-    context.res = {
-      status: 400,
-      headers: corsHeaders(),
-      body: JSON.stringify({ error: "image と mediaType は必須です。" })
-    };
+    res.status(400).json({ error: "image と mediaType は必須です。" });
     return;
   }
 
   const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
   if (!allowedTypes.includes(mediaType)) {
-    context.res = {
-      status: 400,
-      headers: corsHeaders(),
-      body: JSON.stringify({ error: "対応していない画像形式です。" })
-    };
+    res.status(400).json({ error: "対応していない画像形式です。" });
     return;
   }
 
@@ -83,11 +75,7 @@ module.exports = async function (context, req) {
 
     if (!claudeRes.ok) {
       const errText = await claudeRes.text().catch(() => "");
-      context.res = {
-        status: 502,
-        headers: corsHeaders(),
-        body: JSON.stringify({ error: `Claude APIエラー (${claudeRes.status}): ${errText.slice(0, 200)}` })
-      };
+      res.status(502).json({ error: `Claude APIエラー (${claudeRes.status}): ${errText.slice(0, 200)}` });
       return;
     }
 
@@ -96,14 +84,10 @@ module.exports = async function (context, req) {
 
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      context.res = {
-        status: 200,
-        headers: corsHeaders(),
-        body: JSON.stringify({
-          judgment: "要確認", stars: null, confidence: 0,
-          reason: `APIレスポンスからJSONを取得できませんでした。生レスポンス: ${text.slice(0, 200)}`
-        })
-      };
+      res.status(200).json({
+        judgment: "要確認", stars: null, confidence: 0,
+        reason: `APIレスポンスからJSONを取得できませんでした。生レスポンス: ${text.slice(0, 200)}`
+      });
       return;
     }
 
@@ -117,22 +101,9 @@ module.exports = async function (context, req) {
       };
     }
 
-    context.res = { status: 200, headers: corsHeaders(), body: JSON.stringify(result) };
+    res.status(200).json(result);
 
   } catch (err) {
-    context.res = {
-      status: 500,
-      headers: corsHeaders(),
-      body: JSON.stringify({ error: `内部エラー: ${err.message}` })
-    };
+    res.status(500).json({ error: `内部エラー: ${err.message}` });
   }
 };
-
-function corsHeaders() {
-  return {
-    "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Access-Control-Allow-Methods": "POST, OPTIONS"
-  };
-}
