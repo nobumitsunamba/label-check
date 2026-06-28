@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>低排出ガスラベル判定</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+      background: #f5f7fa;
+      color: #1a1a2e;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #fff;
+      border-bottom: 1px solid #e0e4ec;
+      padding: 16px 20px;
+      text-align: center;
+    }
+    header h1 {
+      font-size: 18px;
+      font-weight: 700;
+      color: #1a1a2e;
+      letter-spacing: 0.02em;
+    }
+    header p {
+      font-size: 12px;
+      color: #6b7280;
+      margin-top: 2px;
+    }
+
+    main {
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 20px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+
+    /* Camera / file input */
+    .upload-label {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      min-height: 52px;
+      background: #1d4ed8;
+      color: #fff;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+      border: none;
+    }
+    .upload-label:active { background: #1e40af; }
+    .upload-label svg { flex-shrink: 0; }
+    #fileInput { display: none; }
+
+    /* Preview */
+    #previewWrap {
+      display: none;
+      margin-top: 14px;
+    }
+    #preview {
+      width: 100%;
+      max-height: 320px;
+      object-fit: contain;
+      border-radius: 8px;
+      border: 1px solid #e0e4ec;
+      background: #f0f2f5;
+      display: block;
+    }
+    #fileName {
+      margin-top: 6px;
+      font-size: 12px;
+      color: #6b7280;
+      text-align: center;
+      word-break: break-all;
+    }
+
+    /* Judge button */
+    #judgeBtn {
+      width: 100%;
+      min-height: 52px;
+      background: #16a34a;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 17px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+      letter-spacing: 0.04em;
+    }
+    #judgeBtn:disabled {
+      background: #d1d5db;
+      color: #9ca3af;
+      cursor: not-allowed;
+    }
+    #judgeBtn:not(:disabled):active { background: #15803d; }
+
+    /* Loading */
+    #loading {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 0;
+    }
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 4px solid #e0e4ec;
+      border-top-color: #1d4ed8;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loading p { font-size: 14px; color: #6b7280; }
+
+    /* Error */
+    #errorBox {
+      display: none;
+      background: #fef2f2;
+      border: 1px solid #fca5a5;
+      border-radius: 8px;
+      padding: 12px 14px;
+      color: #b91c1c;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    /* Result */
+    #resultBox { display: none; }
+
+    .result-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .result-icon {
+      font-size: 32px;
+      line-height: 1;
+    }
+    .result-label {
+      font-size: 26px;
+      font-weight: 800;
+    }
+    .result-label.ok    { color: #16a34a; }
+    .result-label.caution { color: #d97706; }
+    .result-label.ng    { color: #dc2626; }
+
+    .result-card {
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+    }
+    .result-card.ok      { background: #f0fdf4; border: 1px solid #86efac; }
+    .result-card.caution { background: #fffbeb; border: 1px solid #fcd34d; }
+    .result-card.ng      { background: #fff1f2; border: 1px solid #fca5a5; }
+
+    .result-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 14px;
+      margin-bottom: 6px;
+    }
+    .result-row:last-child { margin-bottom: 0; }
+    .result-row .key { color: #6b7280; }
+    .result-row .val { font-weight: 600; font-size: 15px; }
+
+    .stars { font-size: 18px; letter-spacing: 2px; }
+
+    .reason-box {
+      background: #f9fafb;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 13px;
+      color: #374151;
+      line-height: 1.6;
+      border: 1px solid #e5e7eb;
+    }
+    .reason-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 4px;
+    }
+
+    .low-confidence-note {
+      margin-top: 10px;
+      padding: 8px 12px;
+      background: #fff7ed;
+      border: 1px solid #fed7aa;
+      border-radius: 8px;
+      font-size: 12px;
+      color: #c2410c;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>低排出ガスラベル判定</h1>
+  <p>低排出ガス認定ラベルをカメラで撮影して判定します</p>
+</header>
+
+<main>
+  <!-- 画像選択カード -->
+  <div class="card">
+    <label class="upload-label" for="fileInput">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+        <circle cx="12" cy="13" r="4"/>
+      </svg>
+      カメラ撮影 / 画像選択
+    </label>
+    <!-- capture="environment" で背面カメラを優先 -->
+    <input type="file" id="fileInput" accept="image/*" capture="environment" />
+
+    <div id="previewWrap">
+      <img id="preview" src="" alt="プレビュー" />
+      <p id="fileName"></p>
+    </div>
+  </div>
+
+  <!-- 判定ボタン -->
+  <button id="judgeBtn" disabled>判定する</button>
+
+  <!-- ローディング -->
+  <div class="card" id="loadingCard" style="display:none;">
+    <div id="loading" style="display:flex;">
+      <div class="spinner"></div>
+      <p>判定中... しばらくお待ちください</p>
+    </div>
+  </div>
+
+  <!-- エラー -->
+  <div id="errorBox"></div>
+
+  <!-- 結果 -->
+  <div class="card" id="resultBox"></div>
+</main>
+
+<script>
+// ============================================================
+// ⚠️ 本番環境では Azure SWA の環境変数または Azure Key Vault を
+//    利用してAPIキーを管理してください。
+//    フロントエンドにAPIキーを直書きしないことを強く推奨します。
+// ============================================================
+const CLAUDE_API_KEY = "YOUR_API_KEY_HERE";
+
+const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
+const CLAUDE_MODEL   = "claude-sonnet-4-6";
+const MAX_FILE_SIZE  = 5 * 1024 * 1024; // 5MB
+
+const fileInput   = document.getElementById("fileInput");
+const previewWrap = document.getElementById("previewWrap");
+const preview     = document.getElementById("preview");
+const fileNameEl  = document.getElementById("fileName");
+const judgeBtn    = document.getElementById("judgeBtn");
+const loadingCard = document.getElementById("loadingCard");
+const errorBox    = document.getElementById("errorBox");
+const resultBox   = document.getElementById("resultBox");
+
+let selectedFile = null;
+
+// ─── ファイル選択 ────────────────────────────────────────────
+fileInput.addEventListener("change", () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+
+  hideError();
+  hideResult();
+
+  if (file.size > MAX_FILE_SIZE) {
+    showError("ファイルサイズが5MBを超えています。より小さい画像を選択してください。");
+    fileInput.value = "";
+    selectedFile = null;
+    judgeBtn.disabled = true;
+    previewWrap.style.display = "none";
+    return;
+  }
+
+  selectedFile = file;
+  const url = URL.createObjectURL(file);
+  preview.src = url;
+  fileNameEl.textContent = file.name;
+  previewWrap.style.display = "block";
+  judgeBtn.disabled = false;
+});
+
+// ─── 判定ボタン ──────────────────────────────────────────────
+judgeBtn.addEventListener("click", async () => {
+  if (!selectedFile) return;
+  hideError();
+  hideResult();
+  setLoading(true);
+
+  try {
+    const base64 = await fileToBase64(selectedFile);
+    const mediaType = selectedFile.type === "image/png" ? "image/png" : "image/jpeg";
+    const result = await callClaudeAPI(base64, mediaType);
+    showResult(result);
+  } catch (err) {
+    showError("判定中にエラーが発生しました。\n" + (err.message || String(err)));
+  } finally {
+    setLoading(false);
+  }
+});
+
+// ─── ファイル → base64 ───────────────────────────────────────
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = () => resolve(reader.result.split(",")[1]);
+    reader.onerror = () => reject(new Error("画像の読み込みに失敗しました。"));
+    reader.readAsDataURL(file);
+  });
+}
+
+// ─── Claude API 呼び出し ──────────────────────────────────────
+async function callClaudeAPI(base64, mediaType) {
+  const systemPrompt = `あなたは自動車の「低排出ガス認定ラベル」を画像から判定する専門システムです。
+判定対象ラベルの特徴
+* 形状: 青色系の楕円形
+* 内容: 星マーク（0〜4個）と「低排出ガス車」の文字
+* 位置: 車のボディに貼付
+判定ルール
+以下のいずれかに分類してください。
+1. OK: ラベルが画像内に明確に1枚確認でき、特徴（青楕円・低排出ガス車の文字）が判別できる
+2. 要確認: 以下のいずれかに該当する場合
+   * ラベルらしきものは見えるが、不鮮明・ぼけ・反射などで確信できない
+   * ラベルが複数枚写っている
+3. NG: ラベルが画像内に存在しない、または全く別のものが写っている
+レスポンス形式
+必ず以下のJSON形式のみで返答してください。他のテキストは含めないでください。
+{ "judgment": "OK" | "要確認" | "NG", "stars": 0〜4の整数（判定がNGまたは要確認でラベルが不明な場合はnull）, "confidence": 0〜100の整数（判定の確信度）, "reason": "判定根拠を1〜3文で簡潔に記述" }`;
+
+  const body = {
+    model: CLAUDE_MODEL,
+    max_tokens: 512,
+    system: systemPrompt,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "image",
+            source: { type: "base64", media_type: mediaType, data: base64 }
+          },
+          {
+            type: "text",
+            text: "この画像の低排出ガス認定ラベルを判定してください。"
+          }
+        ]
+      }
+    ]
+  };
+
+  const res = await fetch(CLAUDE_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": CLAUDE_API_KEY,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true"
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`APIエラー (${res.status}): ${errText.slice(0, 200)}`);
+  }
+
+  const data = await res.json();
+  const text = data?.content?.[0]?.text ?? "";
+
+  // JSON部分を抽出してパース
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    return {
+      judgment: "要確認",
+      stars: null,
+      confidence: 0,
+      reason: `APIレスポンスからJSONを取得できませんでした。生レスポンス: ${text.slice(0, 200)}`
+    };
+  }
+
+  try {
+    return JSON.parse(jsonMatch[0]);
+  } catch (e) {
+    return {
+      judgment: "要確認",
+      stars: null,
+      confidence: 0,
+      reason: `JSONパースに失敗しました。生レスポンス: ${text.slice(0, 200)}`
+    };
+  }
+}
+
+// ─── 結果表示 ─────────────────────────────────────────────────
+function showResult(r) {
+  const judgment   = r.judgment   ?? "要確認";
+  const stars      = r.stars;
+  const confidence = typeof r.confidence === "number" ? r.confidence : 0;
+  const reason     = r.reason ?? "";
+
+  const cls  = judgment === "OK" ? "ok" : judgment === "NG" ? "ng" : "caution";
+  const icon = judgment === "OK" ? "✅" : judgment === "NG" ? "❌" : "⚠️";
+
+  let starsHtml = "";
+  if (judgment !== "NG" && stars !== null && stars !== undefined) {
+    const filled  = "★".repeat(stars);
+    const empty   = "☆".repeat(4 - stars);
+    starsHtml = `
+      <div class="result-row">
+        <span class="key">星の数</span>
+        <span class="val stars">${filled}${empty} (${stars})</span>
+      </div>`;
+  }
+
+  const lowNote = confidence < 60
+    ? `<div class="low-confidence-note">※ 低信頼度（${confidence}%）のため参考値です</div>`
+    : "";
+
+  resultBox.innerHTML = `
+    <div class="result-header">
+      <span class="result-icon">${icon}</span>
+      <span class="result-label ${cls}">${judgment}</span>
+    </div>
+    <div class="result-card ${cls}">
+      ${starsHtml}
+      <div class="result-row">
+        <span class="key">信頼度</span>
+        <span class="val">${confidence}%</span>
+      </div>
+    </div>
+    <div class="reason-label">判定根拠</div>
+    <div class="reason-box">${escapeHtml(reason)}</div>
+    ${lowNote}
+  `;
+
+  resultBox.style.display = "block";
+}
+
+// ─── ユーティリティ ───────────────────────────────────────────
+function setLoading(on) {
+  loadingCard.style.display = on ? "block" : "none";
+  judgeBtn.disabled = on || !selectedFile;
+}
+
+function showError(msg) {
+  errorBox.textContent = msg;
+  errorBox.style.display = "block";
+}
+
+function hideError() { errorBox.style.display = "none"; }
+function hideResult() { resultBox.style.display = "none"; }
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+</script>
+</body>
+</html>
