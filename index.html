@@ -310,8 +310,8 @@ judgeBtn.addEventListener("click", async () => {
   setLoading(true);
 
   try {
-    const base64 = await fileToBase64(selectedFile);
-    const mediaType = selectedFile.type === "image/png" ? "image/png" : "image/jpeg";
+    // 送信前に長辺1568pxへ縮小しJPEG化（Vercelの4.5MBボディ上限対策・トークン削減）
+    const { base64, mediaType } = await downscaleImage(selectedFile);
     const result = await callJudgeAPI(base64, mediaType);
     showResult(result);
   } catch (err) {
@@ -321,13 +321,37 @@ judgeBtn.addEventListener("click", async () => {
   }
 });
 
-// ─── ファイル → base64 ───────────────────────────────────────
-function fileToBase64(file) {
+// ─── 画像を縮小してbase64化 ─────────────────────────────────
+// 長辺を最大1568pxに縮小し、JPEG（品質0.85）に再エンコードして送信量を抑える。
+// これにより Vercel のリクエストボディ上限（約4.5MB）超過による413を防ぐ。
+const MAX_EDGE = 1568;
+
+function downscaleImage(file) {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload  = () => resolve(reader.result.split(",")[1]);
-    reader.onerror = () => reject(new Error("画像の読み込みに失敗しました。"));
-    reader.readAsDataURL(file);
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      const scale = Math.min(1, MAX_EDGE / Math.max(width, height));
+      width  = Math.round(width * scale);
+      height = Math.round(height * scale);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, width, height);
+
+      // JPEGに統一（写真用途で十分・サイズも小さい）
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      resolve({ base64: dataUrl.split(",")[1], mediaType: "image/jpeg" });
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("画像の読み込みに失敗しました。"));
+    };
+    img.src = url;
   });
 }
 
