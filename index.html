@@ -384,16 +384,20 @@ function showResult(r) {
   const cls  = judgment === "OK" ? "ok" : judgment === "NG" ? "ng" : "caution";
   const icon = judgment === "OK" ? "✅" : judgment === "NG" ? "❌" : "⚠️";
 
-  let starsHtml = "";
-  if (judgment !== "NG" && stars !== null && stars !== undefined) {
-    const filled  = "★".repeat(stars);
-    const empty   = "☆".repeat(Math.max(0, 5 - stars));
-    starsHtml = `
+  // 星の数（判定結果に関わらず常に表示。読み取れない場合は「判別不可」）
+  let starsVal;
+  if (typeof stars === "number" && stars >= 0 && stars <= 5) {
+    const filled = "★".repeat(stars);
+    const empty  = "☆".repeat(Math.max(0, 5 - stars));
+    starsVal = `${filled}${empty} (${stars})`;
+  } else {
+    starsVal = "判別不可";
+  }
+  const starsHtml = `
       <div class="result-row">
         <span class="key">星の数</span>
-        <span class="val stars">${filled}${empty} (${stars})</span>
+        <span class="val stars">${starsVal}</span>
       </div>`;
-  }
 
   // 年度・低減率（読み取れた場合のみ表示）
   const yearHtml = year
