@@ -378,6 +378,8 @@ function showResult(r) {
   const stars      = r.stars;
   const confidence = typeof r.confidence === "number" ? r.confidence : 0;
   const reason     = r.reason ?? "";
+  const year       = r.year ?? null;
+  const reduction  = r.reduction ?? null;
 
   const cls  = judgment === "OK" ? "ok" : judgment === "NG" ? "ng" : "caution";
   const icon = judgment === "OK" ? "✅" : judgment === "NG" ? "❌" : "⚠️";
@@ -393,6 +395,14 @@ function showResult(r) {
       </div>`;
   }
 
+  // 年度・低減率（読み取れた場合のみ表示）
+  const yearHtml = year
+    ? `<div class="result-row"><span class="key">年度</span><span class="val">${escapeHtml(year)}</span></div>`
+    : "";
+  const reductionHtml = reduction
+    ? `<div class="result-row"><span class="key">低減率</span><span class="val">${escapeHtml(reduction)}</span></div>`
+    : "";
+
   const lowNote = confidence < 60
     ? `<div class="low-confidence-note">※ 低信頼度（${confidence}%）のため参考値です</div>`
     : "";
@@ -404,6 +414,8 @@ function showResult(r) {
     </div>
     <div class="result-card ${cls}">
       ${starsHtml}
+      ${yearHtml}
+      ${reductionHtml}
       <div class="result-row">
         <span class="key">信頼度</span>
         <span class="val">${confidence}%</span>
